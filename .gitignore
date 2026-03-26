@@ -1,207 +1,180 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[codz]
-*$py.class
+# CRIME PREDICTION MACHINE LEARNING PROJECT
+# Predicts whether a crime will occur based on features
 
-# C extensions
-*.so
+# CELL 1: Install & Import Libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score, classification_report,
+    confusion_matrix, ConfusionMatrixDisplay
+)
+from sklearn.preprocessing import LabelEncoder
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+print("Libraries imported successfully")
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+#CELL 2: Generate Fake Dataset
+np.random.seed(42)
+n = 1000
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py.cover
-.hypothesis/
-.pytest_cache/
-cover/
+hours        = np.random.randint(0, 24, n)
+day_of_week  = np.random.randint(0, 7, n)   # 0=Mon, 6=Sun
+month        = np.random.randint(1, 13, n)
+temperature  = np.random.uniform(-5, 35, n)  # Celsius
+unemployment = np.random.uniform(3, 20, n)   # %
+area_type    = np.random.choice(['urban', 'suburban', 'rural'], n)
+police_units = np.random.randint(0, 10, n)
 
-# Translations
-*.mo
-*.pot
+# Crime more likely at night, in urban areas, with fewer police
+crime_prob = (
+    0.3
+    + 0.15 * (hours < 6).astype(float)          # late night
+    + 0.15 * (hours > 20).astype(float)          # evening
+    + 0.15 * (area_type == 'urban').astype(float)
+    - 0.10 * (police_units / 10)
+    + 0.10 * (unemployment / 20)
+    - 0.05 * (day_of_week < 5).astype(float)     # weekdays slightly safer
+)
+crime_prob = np.clip(crime_prob, 0, 1)
+crime_occurred = (np.random.rand(n) < crime_prob).astype(int)
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+df = pd.DataFrame({
+    'hour':         hours,
+    'day_of_week':  day_of_week,
+    'month':        month,
+    'temperature':  temperature.round(1),
+    'unemployment': unemployment.round(1),
+    'area_type':    area_type,
+    'police_units': police_units,
+    'crime':        crime_occurred   # 1 = crime occurred, 0 = no crime
+})
 
-# Flask stuff:
-instance/
-.webassets-cache
+print("Dataset created")
+print(df.head(10))
+print(f"\nCrime rate: {df['crime'].mean()*100:.1f}%")
 
-# Scrapy stuff:
-.scrapy
 
-# Sphinx documentation
-docs/_build/
+#CELL 3: Explore the Data 
+print("\n── Dataset Info ──")
+print(df.describe())
 
-# PyBuilder
-.pybuilder/
-target/
+fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Crime by hour
+crime_by_hour = df.groupby('hour')['crime'].mean()
+axes[0].bar(crime_by_hour.index, crime_by_hour.values, color='steelblue')
+axes[0].set_title('Crime Rate by Hour of Day')
+axes[0].set_xlabel('Hour')
+axes[0].set_ylabel('Crime Rate')
 
-# IPython
-profile_default/
-ipython_config.py
+# Crime by area type
+crime_by_area = df.groupby('area_type')['crime'].mean()
+axes[1].bar(crime_by_area.index, crime_by_area.values, color='coral')
+axes[1].set_title('Crime Rate by Area Type')
+axes[1].set_xlabel('Area Type')
+axes[1].set_ylabel('Crime Rate')
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+# Crime by police units
+crime_by_police = df.groupby('police_units')['crime'].mean()
+axes[2].plot(crime_by_police.index, crime_by_police.values, marker='o', color='green')
+axes[2].set_title('Crime Rate by Police Units')
+axes[2].set_xlabel('Police Units')
+axes[2].set_ylabel('Crime Rate')
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+plt.tight_layout()
+plt.savefig('crime_exploration.png', dpi=150)
+plt.show()
+print("Exploration charts saved")
 
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-#poetry.toml
+#CELL 4: Preprocess Data
+le = LabelEncoder()
+df['area_type_encoded'] = le.fit_transform(df['area_type'])
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-#pdm.lock
-#pdm.toml
-.pdm-python
-.pdm-build/
+features = ['hour', 'day_of_week', 'month', 'temperature',
+            'unemployment', 'police_units', 'area_type_encoded']
 
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
+X = df[features]
+y = df['crime']
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+print(f"Training samples: {len(X_train)}")
+print(f"Testing  samples: {len(X_test)}")
 
-# SageMath parsed files
-*.sage.py
 
-# Environments
-.env
-.envrc
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+#CELL 5: Train Models
 
-# Spyder project settings
-.spyderproject
-.spyproject
+#Model 1: Logistic Regression 
+lr_model = LogisticRegression(max_iter=1000, random_state=42)
+lr_model.fit(X_train, y_train)
+lr_preds = lr_model.predict(X_test)
+lr_acc   = accuracy_score(y_test, lr_preds)
+print(f"\n Logistic Regression Accuracy: {lr_acc*100:.2f}%")
 
-# Rope project settings
-.ropeproject
+#Model 2: Random Forest
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+rf_preds = rf_model.predict(X_test)
+rf_acc   = accuracy_score(y_test, rf_preds)
+print(f"Random Forest Accuracy:       {rf_acc*100:.2f}%")
 
-# mkdocs documentation
-/site
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+#CELL 6: Evaluate Best Model (Random Forest)
+print("\n── Classification Report (Random Forest) ──")
+print(classification_report(y_test, rf_preds,
+                             target_names=['No Crime', 'Crime']))
 
-# Pyre type checker
-.pyre/
+# Confusion matrix
+cm = confusion_matrix(y_test, rf_preds)
+disp = ConfusionMatrixDisplay(cm, display_labels=['No Crime', 'Crime'])
+disp.plot(cmap='Blues')
+plt.title('Random Forest — Confusion Matrix')
+plt.savefig('confusion_matrix.png', dpi=150)
+plt.show()
+print("Confusion matrix saved")
 
-# pytype static type analyzer
-.pytype/
 
-# Cython debug symbols
-cython_debug/
+#CELL 7: Feature Importance 
+importances = pd.Series(rf_model.feature_importances_, index=features)
+importances = importances.sort_values(ascending=True)
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+plt.figure(figsize=(8, 5))
+importances.plot(kind='barh', color='teal')
+plt.title('Feature Importance (Random Forest)')
+plt.xlabel('Importance Score')
+plt.tight_layout()
+plt.savefig('feature_importance.png', dpi=150)
+plt.show()
+print("Feature importance chart saved")
 
-# Abstra
-# Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
-# Learn more at https://abstra.io/docs
-.abstra/
 
-# Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+#CELL 8: Make a Prediction 
+print("\n── Predict for a New Scenario ──")
 
-# Ruff stuff:
-.ruff_cache/
+new_data = pd.DataFrame([{
+    'hour':               2,      # 2am
+    'day_of_week':        5,      # Saturday
+    'month':              12,     # December
+    'temperature':        3.0,    # Cold
+    'unemployment':       15.0,   # High unemployment
+    'police_units':       1,      # Few police
+    'area_type_encoded':  le.transform(['urban'])[0]
+}])
 
-# PyPI configuration file
-.pypirc
+prediction = rf_model.predict(new_data)[0]
+probability = rf_model.predict_proba(new_data)[0][1]
 
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
-.cursorignore
-.cursorindexingignore
+print(f"Scenario: 2am on a Saturday in December, urban area, 1 police unit")
+print(f"Prediction:  {'CRIME LIKELY' if prediction == 1 else 'NO CRIME'}")
+print(f"Probability: {probability*100:.1f}% chance of crime")
 
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
+
+
